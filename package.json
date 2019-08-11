@@ -1,0 +1,17 @@
+{
+  "name": "tronscan-transfers-downloader",
+  "version": "0.1.0",
+  "description": "Node.js script to download all TRX, TRC10 and TRC20 transfers to/from an account to a CSV file, using Tronscan APIs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": "https://github.com/ColonelJ/tronscan-transfers-downloader.git",
+  "author": "Jason Raymond Bell <jason@epixxware.com>",
+  "license": "Unlicense",
+  "dependencies": {
+    "csv-stringify": "^5.3.3",
+    "request": "^2.88.0",
+    "request-promise-native": "^1.0.7"
+  }
+}
