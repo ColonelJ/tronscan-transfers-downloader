@@ -32,7 +32,7 @@ async function download_transfers(uri) {
             json: true
         };
         reply = await rpn(options);
-        total = reply.total;
+        total = reply.rangeTotal;
         while (true) {
             transfers.push(...reply.data);
             console.log('Downloaded ' + transfers.length + '/' + total);
@@ -41,11 +41,11 @@ async function download_transfers(uri) {
                 break;
             }
             reply = await rpn(options);
-            if (reply.total != total) {
+            if (reply.rangeTotal != total) {
                 break;
             }
         }
-        if (reply.total != total) {
+        if (reply.rangeTotal != total) {
             console.log('Total number of transfers has changed, starting again');
         } else if (transfers.length != total) {
             console.log("Total number of transfers downloaded doesn't match total, starting again");
