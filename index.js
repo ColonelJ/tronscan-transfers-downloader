@@ -14,12 +14,9 @@ if (process.argv.length >= 4) {
 
 async function download_transfers(uri) {
     let transfers;
-    let options;
-    let reply;
-    let total;
     while (true) {
         transfers = [];
-        options = {
+        let options = {
             uri,
             qs: {
                 address,
@@ -31,9 +28,16 @@ async function download_transfers(uri) {
             },
             json: true
         };
-        reply = await rpn(options);
-        total = reply.rangeTotal;
+        let reply = await rpn(options);
+        let total = reply.rangeTotal;
         while (true) {
+            while (reply.total != total && reply.rangeTotal == total) {
+                console.log('Error in query total (got ' + reply.total + ', expected ' + total + '), trying again...');
+                reply = await rpn(options);
+            }
+            if (reply.rangeTotal != total) {
+                break;
+            }
             transfers.push(...reply.data);
             console.log('Downloaded ' + transfers.length + '/' + total);
             options.qs.start += options.qs.limit;
@@ -41,9 +45,6 @@ async function download_transfers(uri) {
                 break;
             }
             reply = await rpn(options);
-            if (reply.rangeTotal != total) {
-                break;
-            }
         }
         if (reply.rangeTotal != total) {
             console.log('Total number of transfers has changed, starting again');
