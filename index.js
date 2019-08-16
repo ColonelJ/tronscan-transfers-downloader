@@ -12,7 +12,43 @@ if (process.argv.length >= 4) {
     outputFile = process.argv[3];
 }
 
-async function download_transfers(uri) {
+function insert_decimal_point(amount, decimals) {
+    amount = amount.toString();
+    if (!decimals) {
+        return amount;
+    }
+    if (amount.length <= decimals) {
+        return '0.' + '0'.repeat(decimals - amount.length) + amount;
+    }
+    return amount.slice(0, amount.length - decimals) + '.' + amount.slice(amount.length - decimals);
+}
+
+let trc10_cache = {};
+
+async function get_trc10_decimals(id) {
+    if (trc10_cache[id]) {
+        return trc10_cache[id].precision;
+    }
+    let options = {
+        uri: 'https://apilist.tronscan.org/api/token',
+        qs: {
+            id,
+            showAll: 1
+        },
+        headers: {
+            'User-Agent': 'Request-Promise-Native'
+        },
+        json: true
+    };
+    let reply = await rpn(options);
+    if (!reply.data.length) {
+        throw new Error("Couldn't retrieve information for TRC10 ID " + id);
+    }
+    trc10_cache[id] = reply.data[0];
+    return trc10_cache[id].precision;
+}
+
+async function download_transfers(uri, transfer_processor) {
     let transfers;
     while (true) {
         transfers = [];
@@ -38,7 +74,9 @@ async function download_transfers(uri) {
             if (reply.rangeTotal != total) {
                 break;
             }
-            transfers.push(...reply.data);
+            for (let i = 0; i < reply.data.length; ++i) {
+                transfers.push(await transfer_processor(reply.data[i]));
+            }
             console.log('Downloaded ' + transfers.length + '/' + total);
             options.qs.start += options.qs.limit;
             if (reply.data.length < options.qs.limit) {
@@ -63,10 +101,18 @@ async function main() {
     try {
         csvFile = await fsPromises.open(outputFile, 'w');
         let record_sets = [];
+
         console.log('Downloading TRX/TRC10 transfers...');
-        record_sets.push(await download_transfers('https://apilist.tronscan.org/api/transfer'));
+        record_sets.push(await download_transfers('https://apilist.tronscan.org/api/transfer', async function(transfer) {
+            transfer.decimals = transfer.tokenName == '_' ? 6 : (await get_trc10_decimals(transfer.tokenName));
+            return transfer;
+        }));
+
         console.log('Downloading TRC20 transfers...');
-        record_sets.push(await download_transfers('https://apilist.tronscan.org/api/contract/events'));
+        record_sets.push(await download_transfers('https://apilist.tronscan.org/api/contract/events', async function(transfer) {
+            return transfer;
+        }));
+
         while (record_sets.length) {
             let max_timestamp = 0;
             let max_timestamp_index;
@@ -80,7 +126,7 @@ async function main() {
             if (!record_sets[max_timestamp_index].length) {
                 record_sets.splice(max_timestamp_index, 1);
             }
-            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, record.decimals || '', record.amount, record.tokenName]]));
+            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, insert_decimal_point(record.amount, record.decimals), record.tokenName]]));
         }
         console.log('Successfully written all records to ' + outputFile + '!');
     } finally {
