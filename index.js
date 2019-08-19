@@ -25,9 +25,9 @@ function insert_decimal_point(amount, decimals) {
 
 let trc10_cache = {};
 
-async function get_trc10_decimals(id) {
+async function get_trc10_details(id) {
     if (trc10_cache[id]) {
-        return trc10_cache[id].precision;
+        return trc10_cache[id];
     }
     let options = {
         uri: 'https://apilist.tronscan.org/api/token',
@@ -45,7 +45,7 @@ async function get_trc10_decimals(id) {
         throw new Error("Couldn't retrieve information for TRC10 ID " + id);
     }
     trc10_cache[id] = reply.data[0];
-    return trc10_cache[id].precision;
+    return trc10_cache[id];
 }
 
 async function download_transfers(uri, transfer_processor) {
@@ -104,12 +104,20 @@ async function main() {
 
         console.log('Downloading TRX/TRC10 transfers...');
         record_sets.push(await download_transfers('https://apilist.tronscan.org/api/transfer', async function(transfer) {
-            transfer.decimals = transfer.tokenName == '_' ? 6 : (await get_trc10_decimals(transfer.tokenName));
+            if (transfer.tokenName == '_') {
+                transfer.decimals = 6;
+                transfer.tokenAbbr = 'TRX';
+            } else {
+                let token_details = await get_trc10_details(transfer.tokenName);
+                transfer.decimals = token_details.precision;
+                transfer.tokenAbbr = token_details.abbr;
+            }
             return transfer;
         }));
 
         console.log('Downloading TRC20 transfers...');
         record_sets.push(await download_transfers('https://apilist.tronscan.org/api/contract/events', async function(transfer) {
+            transfer.tokenAbbr = '';
             return transfer;
         }));
 
@@ -126,7 +134,7 @@ async function main() {
             if (!record_sets[max_timestamp_index].length) {
                 record_sets.splice(max_timestamp_index, 1);
             }
-            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, insert_decimal_point(record.amount, record.decimals), record.tokenName]]));
+            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, insert_decimal_point(record.amount, record.decimals), record.tokenName, record.tokenAbbr]]));
         }
         console.log('Successfully written all records to ' + outputFile + '!');
     } finally {
