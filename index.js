@@ -48,6 +48,54 @@ async function get_trc10_details(id) {
     return trc10_cache[id];
 }
 
+let trc20_details;
+
+async function download_trc20_details() {
+    while (true) {
+        trc20_details = {};
+        let downloaded = 0;
+        let options = {
+            uri: 'https://apilist.tronscan.org/api/token_trc20',
+            qs: {
+                limit: 20,
+                start: 0
+            },
+            headers: {
+                'User-Agent': 'Request-Promise-Native'
+            },
+            json: true
+        };
+        let reply = await rpn(options);
+        let total = reply.rangeTotal;
+        while (true) {
+            while (reply.total != total && reply.rangeTotal == total) {
+                console.log('Error in query total (got ' + reply.total + ', expected ' + total + '), trying again...');
+                reply = await rpn(options);
+            }
+            if (reply.rangeTotal != total) {
+                break;
+            }
+            for (let i = 0; i < reply.trc20_tokens.length; ++i) {
+                trc20_details[reply.trc20_tokens[i].name] = reply.trc20_tokens[i];
+            }
+            downloaded += reply.trc20_tokens.length;
+            console.log('Downloaded ' + downloaded + '/' + total);
+            options.qs.start += options.qs.limit;
+            if (reply.trc20_tokens.length < options.qs.limit) {
+                break;
+            }
+            reply = await rpn(options);
+        }
+        if (reply.rangeTotal != total) {
+            console.log('Total number of TRC20s has changed, starting again');
+        } else if (downloaded != total) {
+            console.log("Total number of TRC20s downloaded doesn't match total, starting again");
+        } else {
+            break;
+        }
+    }
+}
+
 async function download_transfers(uri, transfer_processor) {
     let transfers;
     while (true) {
@@ -100,8 +148,11 @@ async function main() {
     let csvFile;
     try {
         csvFile = await fsPromises.open(outputFile, 'w');
-        let record_sets = [];
 
+        console.log('Downloading details of TRC20 tokens...');
+        await download_trc20_details();
+
+        let record_sets = [];
         console.log('Downloading TRX/TRC10 transfers...');
         record_sets.push(await download_transfers('https://apilist.tronscan.org/api/transfer', async function(transfer) {
             if (transfer.tokenName == '_') {
@@ -119,7 +170,7 @@ async function main() {
 
         console.log('Downloading TRC20 transfers...');
         record_sets.push(await download_transfers('https://apilist.tronscan.org/api/contract/events', async function(transfer) {
-            transfer.tokenAbbr = '';
+            transfer.tokenAbbr = trc20_details[transfer.tokenName] ? trc20_details[transfer.tokenName].symbol : '';
             transfer.tokenFullName = transfer.tokenName;
             return transfer;
         }));
