@@ -107,10 +107,12 @@ async function main() {
             if (transfer.tokenName == '_') {
                 transfer.decimals = 6;
                 transfer.tokenAbbr = 'TRX';
+                transfer.tokenFullName = 'Tronix';
             } else {
                 let token_details = await get_trc10_details(transfer.tokenName);
                 transfer.decimals = token_details.precision;
                 transfer.tokenAbbr = token_details.abbr;
+                transfer.tokenFullName = token_details.name;
             }
             return transfer;
         }));
@@ -118,6 +120,7 @@ async function main() {
         console.log('Downloading TRC20 transfers...');
         record_sets.push(await download_transfers('https://apilist.tronscan.org/api/contract/events', async function(transfer) {
             transfer.tokenAbbr = '';
+            transfer.tokenFullName = transfer.tokenName;
             return transfer;
         }));
 
@@ -134,7 +137,7 @@ async function main() {
             if (!record_sets[max_timestamp_index].length) {
                 record_sets.splice(max_timestamp_index, 1);
             }
-            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, insert_decimal_point(record.amount, record.decimals), record.tokenName, record.tokenAbbr]]));
+            await csvFile.write(stringify([[record.transactionHash, record.timestamp, record.block, record.transferFromAddress, record.transferToAddress, insert_decimal_point(record.amount, record.decimals), record.tokenName, record.tokenAbbr, record.tokenFullName]]));
         }
         console.log('Successfully written all records to ' + outputFile + '!');
     } finally {
